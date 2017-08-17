@@ -1,0 +1,89 @@
+#!/bin/bash
+
+set -e
+
+DOCKER_REGISTRY=${DOCKER_REGISTRY:-https://registry.hub.docker.com}
+DOCKER_REPOSITORY=${DOCKER_REPOSITORY:-library}
+DOCKER_IMAGE=${DOCKER_IMAGE:-drupal}
+DOCKER_IMAGE_TAG=${DOCKER_IMAGE_TAG:-latest}
+STAMP_FILE=${STAMP_FILE:-"$HOME/.image_digest_${DOCKER_REPOSITORY}_${DOCKER_IMAGE}_${DOCKER_IMAGE_TAG}"}
+
+RECIPIENT=${DOCKER_IW_RECIPIENT:-"root"}
+
+get_auth_token()
+{
+	local REPO=$1
+	local IMAGE=$2
+	local URL="https://auth.docker.io/token?service=registry.docker.io&scope=repository:$REPO/$IMAGE:pull"
+	local TOKEN=$(curl -s "$URL" | jq -r '.token')
+	echo $TOKEN
+}
+
+get_image_tags()
+{
+	local REPO=$1
+	local IMAGE=$2
+	local URL="$DOCKER_REGISTRY/v2/repositories/$REPO/$IMAGE/tags/?page_size=100"
+	declare -a TAGS=()
+	while [[ -n "$URL" && "$URL" != "null" ]]; do
+		echo "Retrieving '$URL'"
+		local RESP=$(curl -s "$URL")
+		declare -a PAGE_TAGS=($(jq -r '.results[].name' <<<$RESP))
+		TAGS=("${TAGS[@]}" "${PAGE_TAGS[@]}")
+		URL=$(jq -r '.next' <<<$RESP)
+	done
+	echo "TAGS ${TAGS[@]}"
+}
+
+get_image_last_updated()
+{
+	local REPO=$1
+	local IMAGE=$2
+	local TAG=$3
+	local URL="$DOCKER_REGISTRY/v2/repositories/$REPO/$IMAGE/tags/$TAG/"
+	local RESP=$(curl -s "$URL")
+	echo $RESP | jq -r '.last_updated'
+}
+
+get_image_digest()
+{
+	local TOKEN=$1
+	local REPO=$2
+	local IMAGE=$3
+	local TAG=$4
+	local URL="https://index.docker.io/v2/$REPO/$IMAGE/manifests/$TAG"
+	local RESP=$(curl -s -H "Authorization: Bearer $TOKEN" -H "Accept: application/vnd.docker.distribution.manifest.v2+json" "$URL")
+	echo $RESP | jq -r '.config.digest'
+}
+
+send_email()
+{
+	local RECIPIENT=$1
+	local REPO=$2
+	local IMAGE=$3
+	local TAG=$4
+
+	local LAST_UPDATED=$(get_image_last_updated $REPO $IMAGE $TAG)
+
+	cat <<-EOF | sendmail -t
+	To: $RECIPIENT
+	From: Docker Image Watch <noreply@$(hostname)>
+	Subject: Image $REPO/$IMAGE updated
+
+	The image $REPO/$IMAGE has been updated at $LAST_UPDATED.
+	EOF
+}
+
+DOCKER_TOKEN=$(get_auth_token $DOCKER_REPOSITORY $DOCKER_IMAGE)
+#get_image_tags $DOCKER_REPOSITORY $DOCKER_IMAGE $DOCKER_TOKEN
+OLD_IMAGE_DIGEST=""
+if [ -f "$STAMP_FILE" ]; then
+	OLD_IMAGE_DIGEST=$(cat $STAMP_FILE)
+fi
+NEW_IMAGE_DIGEST=$(get_image_digest $DOCKER_TOKEN $DOCKER_REPOSITORY $DOCKER_IMAGE $DOCKER_IMAGE_TAG)
+
+if [ "$OLD_IMAGE_DIGEST" != "$NEW_IMAGE_DIGEST" ]; then
+	send_email "$RECIPIENT" $DOCKER_REPOSITORY $DOCKER_IMAGE $DOCKER_IMAGE_TAG
+	echo -n $NEW_IMAGE_DIGEST > $STAMP_FILE
+fi
+
