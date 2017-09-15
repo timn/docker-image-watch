@@ -2,13 +2,18 @@
 
 set -e
 
+DOCKER_CMD="sudo docker"
 DOCKER_REGISTRY=${DOCKER_REGISTRY:-https://registry.hub.docker.com}
-DOCKER_REPOSITORY=${DOCKER_REPOSITORY:-library}
-DOCKER_IMAGE=${DOCKER_IMAGE:-drupal}
-DOCKER_IMAGE_TAG=${DOCKER_IMAGE_TAG:-latest}
-STAMP_FILE=${STAMP_FILE:-"$HOME/.image_digest_${DOCKER_REPOSITORY}_${DOCKER_IMAGE}_${DOCKER_IMAGE_TAG}"}
+DOCKER_REPOSITORY=library
+DOCKER_IMAGE=drupal
+DOCKER_IMAGE_TAG=latest
+STAMP_FILE="$HOME/.image_digest_${DOCKER_REPOSITORY}_${DOCKER_IMAGE}_${DOCKER_IMAGE_TAG}"
 
-RECIPIENT=${DOCKER_IW_RECIPIENT:-"root"}
+RECIPIENT="Tim Niemueller <niemueller@kbsg.rwth-aachen.de>"
+
+ENABLE_DIFF=${ENABLE_DIFF:-1}
+CONTAINER_DIFF=${CONTAINER_DIFF:-/usr/local/bin/container-diff}
+CONTAINER_DIFF_TYPES=${CONTAINER_DIFF_TYPES:-apt,file}
 
 get_auth_token()
 {
@@ -56,6 +61,15 @@ get_image_digest()
 	echo $RESP | jq -r '.config.digest'
 }
 
+get_image_diff()
+{
+	local REPO=$1
+	local IMAGE=$2
+	local TAG=$3
+	local CURRENT_IMAGE=$($DOCKER_CMD images | grep $IMAGE | grep $TAG | awk '{ print $3 }')
+	$CONTAINER_DIFF diff --types=$CONTAINER_DIFF_TYPES $CURRENT_IMAGE $REPO/$IMAGE:$TAG | sed -e 's/-----\([^-]\+\)-----/*\1*/g'
+}
+
 send_email()
 {
 	local RECIPIENT=$1
@@ -64,6 +78,12 @@ send_email()
 	local TAG=$4
 
 	local LAST_UPDATED=$(get_image_last_updated $REPO $IMAGE $TAG)
+	local DIFF=
+	if [ -n "$ENABLE_DIFF" ]; then
+		DIFF=$(get_image_diff $REPO $IMAGE $TAG)
+	else
+		echo NO get diff
+	fi
 
 	cat <<-EOF | sendmail -t
 	To: $RECIPIENT
@@ -71,6 +91,8 @@ send_email()
 	Subject: Image $REPO/$IMAGE updated
 
 	The image $REPO/$IMAGE has been updated at $LAST_UPDATED.
+
+	$DIFF
 	EOF
 }
 
@@ -86,4 +108,3 @@ if [ "$OLD_IMAGE_DIGEST" != "$NEW_IMAGE_DIGEST" ]; then
 	send_email "$RECIPIENT" $DOCKER_REPOSITORY $DOCKER_IMAGE $DOCKER_IMAGE_TAG
 	echo -n $NEW_IMAGE_DIGEST > $STAMP_FILE
 fi
-

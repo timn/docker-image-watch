@@ -18,3 +18,8 @@ to be able to send emails.
 The script stores the last know digest in a stamp file. It can be set using
 the STAMP_FILE environment variable.
 
+## Image Diff
+The script can send a list of differences between the old and the new image
+using [container-diff](https://github.com/GoogleCloudPlatform/container-diff).
+In order for this to work, install container-diff on your machine and set
+ENABLE_DIFF to a non-empty value.
