@@ -15,6 +15,9 @@ ENABLE_DIFF=${ENABLE_DIFF:-1}
 CONTAINER_DIFF=${CONTAINER_DIFF:-/usr/local/bin/container-diff}
 CONTAINER_DIFF_TYPES=${CONTAINER_DIFF_TYPES:-apt,file}
 
+AUTOPULL=${AUTOPULL:-0}
+RESTART_CMD=
+
 get_auth_token()
 {
 	local REPO=$1
@@ -76,6 +79,8 @@ send_email()
 	local REPO=$2
 	local IMAGE=$3
 	local TAG=$4
+	local PULLED=$5
+	local RESTARTED=$6
 
 	local LAST_UPDATED=$(get_image_last_updated $REPO $IMAGE $TAG)
 	local DIFF=
@@ -84,6 +89,15 @@ send_email()
 	else
 		echo NO get diff
 	fi
+	if [ "$PULLED" -eq 1 ]; then
+		if [ "$RESTARTED" -eq 1 ]; then
+			PULL_MSG="\nThe image has been pulled and the container restarted automatically."
+		else
+			PULL_MSG="\nThe image has been pulled automatically."
+		fi
+	else
+		PULL_MSG=""
+	fi
 
 	cat <<-EOF | sendmail -t
 	To: $RECIPIENT
@@ -91,6 +105,7 @@ send_email()
 	Subject: Image $REPO/$IMAGE updated
 
 	The image $REPO/$IMAGE has been updated at $LAST_UPDATED.
+	$PULL_MSG
 
 	$DIFF
 	EOF
@@ -104,7 +119,18 @@ if [ -f "$STAMP_FILE" ]; then
 fi
 NEW_IMAGE_DIGEST=$(get_image_digest $DOCKER_TOKEN $DOCKER_REPOSITORY $DOCKER_IMAGE $DOCKER_IMAGE_TAG)
 
+PULLED=0
+RESTARTED=0
+
 if [ "$OLD_IMAGE_DIGEST" != "$NEW_IMAGE_DIGEST" ]; then
-	send_email "$RECIPIENT" $DOCKER_REPOSITORY $DOCKER_IMAGE $DOCKER_IMAGE_TAG
+	if [ "$AUTOPULL" -eq 1 ] ; then
+		$DOCKER_CMD pull $IMAGE
+		PULLED=1
+		if [ ! -z "$RESTART_CMD" ] ; then
+			$RESTART_CMD
+			RESTARTED=1
+		fi
+	fi
+	send_email "$RECIPIENT" $DOCKER_REPOSITORY $DOCKER_IMAGE $DOCKER_IMAGE_TAG $PULLED $RESTARTED
 	echo -n $NEW_IMAGE_DIGEST > $STAMP_FILE
 fi
