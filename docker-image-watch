@@ -84,7 +84,7 @@ send_email()
 
 	local LAST_UPDATED=$(get_image_last_updated $REPO $IMAGE $TAG)
 	local DIFF=
-	if [ -n "$ENABLE_DIFF" ]; then
+	if [ "$ENABLE_DIFF" -eq 1 ]; then
 		DIFF=$(get_image_diff $REPO $IMAGE $TAG)
 	else
 		echo NO get diff
