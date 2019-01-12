@@ -126,7 +126,7 @@ if [ "$OLD_IMAGE_DIGEST" != "$NEW_IMAGE_DIGEST" ]; then
 	if [ "$AUTOPULL" -eq 1 ] ; then
 		$DOCKER_CMD pull $IMAGE
 		PULLED=1
-		if [ ! -z "$RESTART_CMD" ] ; then
+		if [ -n "$RESTART_CMD" ] ; then
 			$RESTART_CMD
 			RESTARTED=1
 		fi
