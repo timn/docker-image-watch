@@ -91,9 +91,9 @@ send_email()
 	fi
 	if [ "$PULLED" -eq 1 ]; then
 		if [ "$RESTARTED" -eq 1 ]; then
-			PULL_MSG="\nThe image has been pulled and the container restarted automatically."
+			PULL_MSG="The image has been pulled and the container restarted automatically."
 		else
-			PULL_MSG="\nThe image has been pulled automatically."
+			PULL_MSG="The image has been pulled automatically."
 		fi
 	else
 		PULL_MSG=""
@@ -105,6 +105,7 @@ send_email()
 	Subject: Image $REPO/$IMAGE updated
 
 	The image $REPO/$IMAGE has been updated at $LAST_UPDATED.
+
 	$PULL_MSG
 
 	$DIFF
