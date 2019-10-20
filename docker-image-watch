@@ -16,7 +16,7 @@ CONTAINER_DIFF=${CONTAINER_DIFF:-/usr/local/bin/container-diff}
 CONTAINER_DIFF_TYPES=${CONTAINER_DIFF_TYPES:-apt,file}
 
 AUTOPULL=${AUTOPULL:-0}
-RESTART_CMD=
+RESTART_CMD=${RESTART_CMD:-}
 
 get_auth_token()
 {
