@@ -15,8 +15,10 @@ ENABLE_DIFF=${ENABLE_DIFF:-1}
 CONTAINER_DIFF=${CONTAINER_DIFF:-/usr/local/bin/container-diff}
 CONTAINER_DIFF_TYPES=${CONTAINER_DIFF_TYPES:-apt,file}
 
+CONTAINER_NAME=${CONTAINER_NAME:-drupal}
+
 AUTOPULL=${AUTOPULL:-0}
-RESTART_CMD=${RESTART_CMD:-}
+RESTART_CMD=${RESTART_CMD:-systemctl restart docker@${CONTAINER_NAME}.service}
 
 get_auth_token()
 {
@@ -51,6 +53,12 @@ get_image_last_updated()
 	local URL="$DOCKER_REGISTRY/v2/repositories/$REPO/$IMAGE/tags/$TAG/"
 	local RESP=$(curl -s "$URL")
 	echo $RESP | jq -r '.last_updated'
+}
+
+get_container_image_digest()
+{
+  local CONTAINER=$1
+  docker inspect $CONTAINER | jq -r '.[0].Image'
 }
 
 get_image_digest()
@@ -116,7 +124,10 @@ DOCKER_TOKEN=$(get_auth_token $DOCKER_REPOSITORY $DOCKER_IMAGE)
 #get_image_tags $DOCKER_REPOSITORY $DOCKER_IMAGE $DOCKER_TOKEN
 OLD_IMAGE_DIGEST=""
 if [ -f "$STAMP_FILE" ]; then
-	OLD_IMAGE_DIGEST=$(cat $STAMP_FILE)
+	OLD_IMAGE_DIGEST=$(get_container_image_digest $CONTAINER_NAME)
+	if [ "$OLD_IMAGE_DIGEST" == "" ] ; then
+		OLD_IMAGE_DIGEST=$(cat $STAMP_FILE)
+	fi
 fi
 NEW_IMAGE_DIGEST=$(get_image_digest $DOCKER_TOKEN $DOCKER_REPOSITORY $DOCKER_IMAGE $DOCKER_IMAGE_TAG)
 
